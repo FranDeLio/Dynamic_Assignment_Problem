@@ -10,6 +10,7 @@ from scipy.optimize import linear_sum_assignment
 import simpy
 from scipy.stats import norm
 from scipy.spatial import distance
+import pandas as pd
 
 n_served_customers = 0
 
@@ -51,13 +52,25 @@ class User:
             random.uniform(0, self.map_size[0]),
             random.uniform(0, self.map_size[1]),
         )
+        self.service_time = 0
+        self.waiting_time = 0
 
     def use_car(self, car):
         # User gets a car and drives for a random amount of time
         print(f"User {self.id} takes car {car.id} at time {self.env.now}")
         with car.request() as request:
+
+            service_request_time = env.now
+
             yield request
+
+            self.waiting_time = env.now - service_request_time
+
+            service_start_time = env.now
+        
             yield self.env.timeout(5)
+
+            self.service_time = env.now - service_start_time
 
         # User returns the car
         print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
@@ -66,11 +79,10 @@ class User:
 class Dispatcher:
     def __init__(self, env, users, available_cars, solver):
         self.env = env
-        #self.users = users
-        #self.available_cars = available_cars
         self.solver = solver
         self.users = {user.id: user for user in users}
         self.available_cars = {car.id: car for car in available_cars}
+        self.simulation_data = []
 
     def solve(self, solver) -> float:
         optimal_matching = solver.get_optimal_solution(self.available_cars, self.users)
@@ -79,6 +91,10 @@ class Dispatcher:
 
     def add_new_user(self, user):
         self.users[user.id]=user
+
+    def collect_service_data(self, user, car):
+        
+        self.simulation_data.append({"user_id": user.id, "car_id": car.id, "service_time": user.service_time, "waiting_time": user.waiting_time})
 
     def dispatch(self):
         # Generate all possible combinations of users and cars
@@ -97,20 +113,23 @@ class Dispatcher:
             # Assign cars to users based on the globally optimal assignment
             for user_id, car_id in optimal_solution.items():
                 
-                car=self.available_cars[car_id]
-                user=self.users[user_id]
+                car=self.available_cars.get(car_id)
+                user=self.users.get(user_id)
                 print((user, car))
-                #indexing fails here as car is just an id of car, and there's no .loc to get the correct car
-                #easier approach just index self.available cars
+
                 self.available_cars.pop(car_id, None)
+
                 self.env.process(user.use_car(car))
-                self.available_cars[car_id]=car
+
+                self.available_cars.update({car_id: car})
                 car.position = user.position
+                
+                self.collect_service_data(user, car)
+                print(f"fff {user.waiting_time}")
+
                 self.users.pop(user_id, None)
+
                 n_served_customers += 1
-
-            print((len(self.available_cars), len(self.users)))
-
 
 class CarSharingSimulation:
     def __init__(self, env, num_cars, num_users, map_size, simulation_time):
@@ -121,7 +140,7 @@ class CarSharingSimulation:
         self.cars = [Car(env, i, self.map_size, capacity=1) for i in range(num_cars)]
         self.users = [User(env, i, self.map_size) for i in range(num_users)]
         self.available_cars = self.cars  # Initially, all cars are available
-        self.dispatcher = Dispatcher(env, self.users, self.cars, MILPSolver())
+        self.dispatcher = Dispatcher(env, self.users, self.cars, MILPSolver(decision_variable_type="real", solver_name="cbc"))
         self.simulation_time = simulation_time
 
     @timeit
@@ -143,11 +162,15 @@ class CarSharingSimulation:
                 print(f"User {self.num_users} joins the simulation at time {env.now}")
                 self.num_users += 1
 
-            yield self.env.timeout(6)  # Dispatch cars every 1 minute
+            yield self.env.timeout(15)  # Dispatch cars every 1 minute
+
+    def get_simulation_data(self):
+        return self.dispatcher.simulation_data 
 
 
 # Setup and run the simulation
 env = simpy.Environment()
-car_sharing_sim = CarSharingSimulation(env=env, num_cars=5, num_users=10, map_size=(10, 10), simulation_time=2000)
+car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=10, map_size=(10, 10), simulation_time=200)
 car_sharing_sim.run()
+simulation_data = pd.DataFrame(car_sharing_sim.get_simulation_data()).to_csv("sim_data.csv")
 print(f"Customers Served: {n_served_customers}")

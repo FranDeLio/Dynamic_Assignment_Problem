@@ -13,31 +13,26 @@ import logging
 logging.getLogger("pyomo.core").setLevel(logging.ERROR)
 
 
-class OptimalTransportProblem(ABC):
-    def __init__(
-        self, 
-    ) -> None:
-
-        x=1
+class AssignmentSolver(ABC):
+    #this is a good place to specify the objective function to be used
 
     @abstractmethod
     def get_optimal_solution(self) -> float:
         pass
 
 
-class MILPSolver(OptimalTransportProblem):
+class MILPSolver(AssignmentSolver):
     def __init__(
-        self
+        self, decision_variable_type: str = "real", solver_name: str = "cbc"
     ) -> None:
-        #super().__init__(available_cars, users)
-
-        x=1
+        
+        self.decision_variable_type = decision_variable_type
+        self.solver_name = solver_name
 
     def get_optimal_solution(self, available_cars, users,
-        decision_variable_type: str = "real", solver_name: str = "cbc"
     ) -> float:
         
-        if decision_variable_type == "real":
+        if self.decision_variable_type == "real":
             decision_domain = pe.NonNegativeReals
         else:
             decision_domain = pe.Binary
@@ -47,15 +42,11 @@ class MILPSolver(OptimalTransportProblem):
         self.cost_matrix = distance.cdist(
             self.source_coordinates, self.destination_coordinates, "euclidean"
         )
-        
 
         self.available_cars_ids = [car.id for car in available_cars.values()]
         self.users_ids = [user.id for user in users.values()]
-        #self.cost_matrix = np.vstack([self.users_ids, self.cost_matrix])
-        import itertools
-        #self.cost_matrix = np.stack([list(itertools.chain.from_iterable([[[0]],[self.available_cars_ids]])), self.cost_matrix])
 
-        solver = po.SolverFactory(solver_name)
+        solver = po.SolverFactory(self.solver_name)
         model = pe.ConcreteModel()
 
         model.source = pe.Set(initialize=self.available_cars_ids)
@@ -104,15 +95,8 @@ class MILPSolver(OptimalTransportProblem):
         solution_df = (pd.Series(model.y.extract_values())
                    .reset_index()
                    .rename(columns={'level_0': 'users', 'level_1': 'cars', 0: 'y'}))
-        #print(solution_df)
+        
         solution_df = solution_df.loc[solution_df.y == 1, ["users", "cars"]].set_index("cars")
-
-        #print(solution_df)
-
         result = solution_df.to_dict()["users"]
-
-        #print(result)
-
-
         
         return result
