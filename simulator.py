@@ -3,10 +3,13 @@ from functools import wraps
 import random
 import itertools
 
+from solvers import MILPSolver
+
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 import simpy
-
+from scipy.stats import norm
+from scipy.spatial import distance
 
 n_served_customers = 0
 
@@ -61,23 +64,21 @@ class User:
 
 
 class Dispatcher:
-    def __init__(self, env, users, available_cars):
+    def __init__(self, env, users, available_cars, solver):
         self.env = env
-        self.users = users
-        self.available_cars = available_cars
-        # add tracker of positions for available cars
-        self.user_coordinates = {user.id: user.position for user in self.users}
-        self.car_coordinates = {car.id: car.position for car in self.available_cars}
+        #self.users = users
+        #self.available_cars = available_cars
+        self.solver = solver
+        self.users = {user.id: user for user in users}
+        self.available_cars = {car.id: car for car in available_cars}
 
-    def solve(self) -> float:
-        x_index, y_index = linear_sum_assignment(self.cost_matrix)
-        optimal_value = self.cost_matrix[x_index, y_index].sum()
+    def solve(self, solver) -> float:
+        optimal_matching = solver.get_optimal_solution(self.available_cars, self.users)
 
-        return optimal_value
+        return optimal_matching
 
     def add_new_user(self, user):
-        self.users.append(user)
-        self.user_coordinates[user.id] = user.position
+        self.users[user.id]=user
 
     def dispatch(self):
         # Generate all possible combinations of users and cars
@@ -85,25 +86,30 @@ class Dispatcher:
         global n_served_customers
 
         # Find the assignment that minimizes total distance
-        min_distance = float("inf")
-        best_assignment = None
-        for user, car in assignments:
-            distance = car.get_distance_to_user(user)
-            if distance < min_distance:
-                min_distance = distance
-                best_assignment = (user, car)
+        if (len(self.available_cars) == 0) | (len(self.users)) == 0:
 
-        # Assign cars to users based on the globally optimal assignment
-        if best_assignment:
-            user, car = best_assignment
-            self.available_cars.remove(car)
-            self.env.process(user.use_car(car))
-            # self.car_coordinates.pop(car.id, None)
-            self.available_cars.append(car)
-            car.position = user.position
-            # self.car_coordinates[car.id] = car.position
-            self.users.remove(user)
-            n_served_customers += 1
+            pass
+
+        else:
+        
+            optimal_solution = self.solve(self.solver)
+
+            # Assign cars to users based on the globally optimal assignment
+            for user_id, car_id in optimal_solution.items():
+                
+                car=self.available_cars[car_id]
+                user=self.users[user_id]
+                print((user, car))
+                #indexing fails here as car is just an id of car, and there's no .loc to get the correct car
+                #easier approach just index self.available cars
+                self.available_cars.pop(car_id, None)
+                self.env.process(user.use_car(car))
+                self.available_cars[car_id]=car
+                car.position = user.position
+                self.users.pop(user_id, None)
+                n_served_customers += 1
+
+            print((len(self.available_cars), len(self.users)))
 
 
 class CarSharingSimulation:
@@ -114,8 +120,8 @@ class CarSharingSimulation:
         self.map_size = map_size
         self.cars = [Car(env, i, self.map_size, capacity=1) for i in range(num_cars)]
         self.users = [User(env, i, self.map_size) for i in range(num_users)]
-        self.available_cars = list(self.cars)  # Initially, all cars are available
-        self.dispatcher = Dispatcher(env, self.users, self.available_cars)
+        self.available_cars = self.cars  # Initially, all cars are available
+        self.dispatcher = Dispatcher(env, self.users, self.cars, MILPSolver())
         self.simulation_time = simulation_time
 
     @timeit
@@ -130,7 +136,7 @@ class CarSharingSimulation:
         while True:
 
             self.dispatcher.dispatch()
-            n_new_users = np.random.poisson(0.2)
+            n_new_users = np.random.poisson(1)
 
             for i in range(0, n_new_users):
                 self.dispatcher.add_new_user(User(env, self.num_users, self.map_size))
@@ -142,6 +148,6 @@ class CarSharingSimulation:
 
 # Setup and run the simulation
 env = simpy.Environment()
-car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=2000, map_size=(10, 10), simulation_time=2000)
+car_sharing_sim = CarSharingSimulation(env=env, num_cars=5, num_users=10, map_size=(10, 10), simulation_time=2000)
 car_sharing_sim.run()
 print(f"Customers Served: {n_served_customers}")
