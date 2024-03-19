@@ -14,7 +14,6 @@ import pandas as pd
 
 n_served_customers = 0
 
-
 def timeit(func):
     @wraps(func)
     def timeit_wrapper(*args, **kwargs):
@@ -39,10 +38,6 @@ class Car(simpy.Resource):
         )
         super().__init__(env, capacity)
 
-    def get_distance_to_user(self, user):
-        return np.linalg.norm(np.array(self.position) - np.array(user.position))
-
-
 class User:
     def __init__(self, env, id, map_size):
         self.env = env
@@ -60,20 +55,25 @@ class User:
         print(f"User {self.id} takes car {car.id} at time {self.env.now}")
         with car.request() as request:
 
-            service_request_time = env.now
+            service_request_time = self.env.now
 
             yield request
 
-            self.waiting_time = env.now - service_request_time
+            self.waiting_time = self.env.now - service_request_time
 
-            service_start_time = env.now
+            service_start_time = self.env.now
         
             yield self.env.timeout(5)
 
-            self.service_time = env.now - service_start_time
+            self.service_time = self.env.now - service_start_time
 
         # User returns the car
         print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
+
+    def _use_car(self, car):
+
+        self.waiting_time = 69
+        self.service_time = 7
 
 
 class Dispatcher:
@@ -86,28 +86,24 @@ class Dispatcher:
 
     def solve(self, solver) -> float:
         optimal_matching = solver.get_optimal_solution(self.available_cars, self.users)
-
         return optimal_matching
 
     def add_new_user(self, user):
-        self.users[user.id]=user
+        self.users.update({user.id: user})
 
     def collect_service_data(self, user, car):
-        
-        self.simulation_data.append({"user_id": user.id, "car_id": car.id, "service_time": user.service_time, "waiting_time": user.waiting_time})
+        x={"user_id": user.id, "car_id": car.id, "service_time": user.service_time, "waiting_time": user.waiting_time}
+        print(x)
+        self.simulation_data.append(x)
 
     def dispatch(self):
         # Generate all possible combinations of users and cars
-        assignments = list(itertools.product(self.users, self.available_cars))
         global n_served_customers
 
         # Find the assignment that minimizes total distance
-        if (len(self.available_cars) == 0) | (len(self.users)) == 0:
-
+        if (len(self.available_cars) == 0) | (len(self.users) == 0):
             pass
-
         else:
-        
             optimal_solution = self.solve(self.solver)
 
             # Assign cars to users based on the globally optimal assignment
@@ -120,6 +116,7 @@ class Dispatcher:
                 self.available_cars.pop(car_id, None)
 
                 self.env.process(user.use_car(car))
+                user._use_car(car)
 
                 self.available_cars.update({car_id: car})
                 car.position = user.position
@@ -149,11 +146,11 @@ class CarSharingSimulation:
         self.env.process(self.dispatch_cars())
 
         # Start the simulation
-        self.env.run(until=self.simulation_time)  # Run the simulation for 50 time units
+        self.env.run(until=self.simulation_time) # Run the simulation for 50 time units
 
     def dispatch_cars(self):
-        while True:
 
+        while True:
             self.dispatcher.dispatch()
             n_new_users = np.random.poisson(1)
 
@@ -170,7 +167,7 @@ class CarSharingSimulation:
 
 # Setup and run the simulation
 env = simpy.Environment()
-car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=10, map_size=(10, 10), simulation_time=200)
+car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=10, map_size=(10, 10), simulation_time=2000)
 car_sharing_sim.run()
 simulation_data = pd.DataFrame(car_sharing_sim.get_simulation_data()).to_csv("sim_data.csv")
 print(f"Customers Served: {n_served_customers}")
