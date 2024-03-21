@@ -9,7 +9,6 @@ import pyomo.environ as pe
 import pyomo.opt as po
 import logging
 
-
 logging.getLogger("pyomo.core").setLevel(logging.ERROR)
 
 
@@ -52,15 +51,11 @@ class MILPSolver(AssignmentSolver):
         model.source = pe.Set(initialize=self.available_cars_ids)
         model.destination = pe.Set(initialize=self.users_ids)
 
-        df=pd.DataFrame(self.cost_matrix)
-        df.insert(loc=0, column='insert', value=self.available_cars_ids)
-        df=df.set_index('insert')
-        df.columns=self.users_ids
-        cost = (
-            df
-            .stack()
-            .to_dict()
-        )
+        cost = (pd.DataFrame(self.cost_matrix, index=self.available_cars_ids, columns=self.users_ids)
+                .stack()
+                .to_dict())
+        
+        print(cost)
 
         model.cost = pe.Param(model.source, model.destination, initialize=cost)
         model.y = pe.Var(
@@ -94,9 +89,15 @@ class MILPSolver(AssignmentSolver):
 
         solution_df = (pd.Series(model.y.extract_values())
                    .reset_index()
-                   .rename(columns={'level_0': 'users', 'level_1': 'cars', 0: 'y'}))
+                   .rename(columns={'level_0': 'cars', 'level_1': 'users', 0: 'y'})
+                   .loc[lambda x: x.y == 1, ["users", "cars"]]
+                   .reset_index(drop=True))
         
-        solution_df = solution_df.loc[solution_df.y == 1, ["users", "cars"]].set_index("cars")
-        result = solution_df.to_dict()["users"]
+        n_rows = solution_df.shape[0]
+
+        for i in range(0, n_rows):
+           solution_df.loc[i,"assignment_cost"] = cost[solution_df.loc[i,"cars"], solution_df.loc[i,"users"]]
+        
+        result = solution_df.to_dict(orient='records')
         
         return result

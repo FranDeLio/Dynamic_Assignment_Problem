@@ -54,10 +54,10 @@ class User:
             random.uniform(0, self.map_size[0]),
             random.uniform(0, self.map_size[1]),
         )
-        self.service_time = 0
-        self.waiting_time = 0
-        self.service_request_time = self.env.now
+        self.request_activation_time = self.env.now
 
+    def set_assignment_cost(self, assignment_cost):
+        self.assignment_cost = assignment_cost
 
     def use_car(self, car):
         """User action to use a car."""
@@ -66,12 +66,17 @@ class User:
         with car.request() as request:
 
             yield request
-            self.waiting_time = self.env.now - self.service_request_time
+            waiting_time = self.env.now - self.request_activation_time
             service_start_time = self.env.now
             yield self.env.timeout(5)
-            self.service_time = self.env.now - service_start_time
+            request_completion_time = self.env.now
+            service_time = request_completion_time - service_start_time
+            order_fullfilment_time = request_completion_time - self.request_activation_time
         
-        data={"user_id": self.id, "car_id": car.id, "waiting_time": self.waiting_time, "service_time": self.service_time}
+        data={"user_id": self.id, "car_id": car.id, "activation_time": self.request_activation_time,
+              "request_completion_time": request_completion_time,"waiting_time": waiting_time,
+              "service_time": service_time, "order_fullfilment_time": order_fullfilment_time, 
+              "assignment_cost": self.assignment_cost}
         simulation_data.append(data)
 
         # User returns the car
@@ -115,17 +120,23 @@ class Dispatcher:
         
         optimal_solution = self.solve(self.solver)
         # Assign cars to users based on the globally optimal assignment
-        for user_id, car_id in optimal_solution.items():
-            
+        for optimal_match in optimal_solution:
+            #improve readability, split into different methods to be called within the for loop
+            print(optimal_match)
+            car_id = optimal_match.get("cars")
+            user_id = optimal_match.get("users")
+            assignment_cost = optimal_match.get("assignment_cost")
+
             car = self.available_cars.get(car_id)
             user = self.users.get(user_id)
             self.available_cars.pop(car_id, None)
+            user.set_assignment_cost(assignment_cost)
             self.env.process(user.use_car(car))
             #user._test_use_car(car)
             self.available_cars.update({car_id: car})
             car.coordinates_start = user.coordinates_start
             #self._collect_service_data(user, car)
-            print(f"fff {user.waiting_time}")
+            #print(f"fff {user.waiting_time}")
             self.users.pop(user_id, None)
             n_served_customers += 1
 
@@ -170,7 +181,7 @@ class CarSharingSimulation:
 
 # Setup and run the simulation
 env = simpy.Environment()
-car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=100, map_size=(10, 10), simulation_time=2000)
+car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=4, map_size=(10, 10), simulation_time=200)
 car_sharing_sim.run()
-simulation_data = pd.DataFrame(simulation_data).to_csv("sim_data.csv")
+simulation_data = pd.DataFrame(simulation_data).to_csv("sim_data.csv", index=False)
 print(f"Customers Served: {n_served_customers}")
