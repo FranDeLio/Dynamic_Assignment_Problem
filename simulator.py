@@ -13,6 +13,7 @@ from scipy.spatial import distance
 import pandas as pd
 
 n_served_customers = 0
+simulation_data = []
 
 def timeit(func):
     """Decorator to measure the execution time of a function."""
@@ -33,7 +34,7 @@ class Car(simpy.Resource):
     def __init__(self, env, id, map_size, capacity):
         self.id = id
         self.map_size = map_size
-        self.position = (
+        self.coordinates_start = (
             random.uniform(0, self.map_size[0]),
             random.uniform(0, self.map_size[1]),
         )
@@ -45,29 +46,38 @@ class User:
         self.env = env
         self.id = id
         self.map_size = map_size
-        self.position = (
+        self.coordinates_start = (
+            random.uniform(0, self.map_size[0]),
+            random.uniform(0, self.map_size[1]),
+        )
+        self.coordinates_destination = (
             random.uniform(0, self.map_size[0]),
             random.uniform(0, self.map_size[1]),
         )
         self.service_time = 0
         self.waiting_time = 0
+        self.service_request_time = self.env.now
+
 
     def use_car(self, car):
         """User action to use a car."""
         print(f"User {self.id} takes car {car.id} at time {self.env.now}")
+        global simulation_data
         with car.request() as request:
 
-            service_request_time = self.env.now
             yield request
-            self.waiting_time = self.env.now - service_request_time
+            self.waiting_time = self.env.now - self.service_request_time
             service_start_time = self.env.now
             yield self.env.timeout(5)
             self.service_time = self.env.now - service_start_time
+        
+        data={"user_id": self.id, "car_id": car.id, "waiting_time": self.waiting_time, "service_time": self.service_time}
+        simulation_data.append(data)
 
         # User returns the car
         print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
 
-    def _use_car(self, car):
+    def _test_use_car(self, car):
         self.waiting_time = 69
         self.service_time = 7
 
@@ -90,7 +100,7 @@ class Dispatcher:
         """Add a new user to the simulation."""
         self.users.update({user.id: user})
 
-    def collect_service_data(self, user, car):
+    def _collect_service_data(self, user, car):
         """Collect service data for analysis."""
         data={"user_id": user.id, "car_id": car.id, "service_time": user.service_time, "waiting_time": user.waiting_time}
         print(data)
@@ -107,14 +117,14 @@ class Dispatcher:
         # Assign cars to users based on the globally optimal assignment
         for user_id, car_id in optimal_solution.items():
             
-            car=self.available_cars.get(car_id)
-            user=self.users.get(user_id)
+            car = self.available_cars.get(car_id)
+            user = self.users.get(user_id)
             self.available_cars.pop(car_id, None)
             self.env.process(user.use_car(car))
-            #user._use_car(car)
+            #user._test_use_car(car)
             self.available_cars.update({car_id: car})
-            car.position = user.position
-            self.collect_service_data(user, car)
+            car.coordinates_start = user.coordinates_start
+            #self._collect_service_data(user, car)
             print(f"fff {user.waiting_time}")
             self.users.pop(user_id, None)
             n_served_customers += 1
@@ -160,7 +170,7 @@ class CarSharingSimulation:
 
 # Setup and run the simulation
 env = simpy.Environment()
-car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=10, map_size=(10, 10), simulation_time=2000)
+car_sharing_sim = CarSharingSimulation(env=env, num_cars=1, num_users=100, map_size=(10, 10), simulation_time=2000)
 car_sharing_sim.run()
-simulation_data = pd.DataFrame(car_sharing_sim.get_simulation_data()).to_csv("sim_data.csv")
+simulation_data = pd.DataFrame(simulation_data).to_csv("sim_data.csv")
 print(f"Customers Served: {n_served_customers}")

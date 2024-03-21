@@ -37,8 +37,8 @@ class MILPSolver(AssignmentSolver):
         else:
             decision_domain = pe.Binary
 
-        self.source_coordinates = [car.position for car in available_cars.values()]
-        self.destination_coordinates = [user.position for user in users.values()]
+        self.source_coordinates = [car.coordinates_start for car in available_cars.values()]
+        self.destination_coordinates = [user.coordinates_start for user in users.values()]
         self.cost_matrix = distance.cdist(
             self.source_coordinates, self.destination_coordinates, "euclidean"
         )
