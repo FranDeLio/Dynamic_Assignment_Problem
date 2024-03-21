@@ -1,9 +1,7 @@
-import time
-from functools import wraps
 import random
-import itertools
 
 from solvers import MILPSolver
+from utils import timeit
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -14,20 +12,6 @@ import pandas as pd
 
 n_served_customers = 0
 simulation_data = []
-
-def timeit(func):
-    """Decorator to measure the execution time of a function."""
-    @wraps(func)
-    def timeit_wrapper(*args, **kwargs):
-        start_time = time.perf_counter()
-        result = func(*args, **kwargs)
-        end_time = time.perf_counter()
-        total_time = end_time - start_time
-        # first item in the args, ie args[0] is self
-        print(f"Function {func.__name__}{args} {kwargs} Took {total_time:.4f} seconds")
-        return result
-
-    return timeit_wrapper
 
 class Car(simpy.Resource):
     """Representation of a car in the simulation."""
