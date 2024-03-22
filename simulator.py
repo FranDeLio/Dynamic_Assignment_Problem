@@ -43,16 +43,17 @@ class User:
     def save_assignment_cost(self, assignment_cost):
         self.assignment_cost = round(assignment_cost, ndigits=3)
 
-    def use_car(self, car, ride_distance):
+    def use_car(self, car):
         """User action to use a car."""
         print(f"User {self.id} takes car {car.id} at time {self.env.now}")
         global simulation_data
         with car.request() as request:
 
             yield request
+            #note that start to customer and customer to destination are not split in this logic
             waiting_time = round(self.env.now - self.request_activation_time, 2)
             service_start_time = round(self.env.now, 2)
-            yield self.env.timeout(ride_distance)
+            yield self.env.timeout(self.assignment_cost)
             request_completion_time = round(self.env.now, 2)
             service_time = round(request_completion_time - service_start_time, 2)
             order_fullfilment_time = round(request_completion_time - self.request_activation_time, 2)
@@ -62,9 +63,11 @@ class User:
               "service_time": service_time, "order_fullfilment_time": order_fullfilment_time, 
               "assignment_cost": self.assignment_cost, "simulation_id": self.simulation_id}
         simulation_data.append(request_data)
-
+        
         # User returns the car
         print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
+
+        return waiting_time
 
 
 class Dispatcher:
@@ -103,31 +106,32 @@ class Dispatcher:
         """Set car to position of customer's destination."""
         car.coordinates_start = user.coordinates_start
 
-    def dispatch(self):
-        """Dispatch cars to users."""
-        global n_served_customers
-
-        if not self.available_cars or not self.users:
-            return
-        
-        optimal_solution = self.solve(self.solver)
-        # Assign cars to users based on the globally optimal assignment
+    def assign_car_to_user(self, optimal_solution):
+        """Assign cars to users based on the globally optimal assignment."""
         for optimal_match in optimal_solution:
-            #improve readability, split into different methods to be called within the for loop
             matched_car_id = optimal_match.get("cars")
             matched_user_id = optimal_match.get("users")
             assignment_cost = optimal_match.get("assignment_cost")
             car = self.available_cars.get(matched_car_id)
             user = self.users.get(matched_user_id)
+            
             user.save_assignment_cost(assignment_cost)
-            self.global_assignment_cost+=assignment_cost
-
+            self.global_assignment_cost += assignment_cost
             self.set_car_to_busy(car)
-            self.env.process(user.use_car(car, assignment_cost))
+            self.env.process(user.use_car(car))
             self.move_car_to_ride_destination(car, user)
             self.n_served_customers += 1
             self.remove_served_user(user)
             self.set_car_to_free(car)
+            
+
+    def dispatch(self):
+        """Dispatch cars to users."""
+        if not self.available_cars or not self.users:
+            return
+        
+        optimal_solution = self.solve(self.solver)
+        self.assign_car_to_user(optimal_solution)
 
 
 class RideSharingSimulation:
@@ -170,9 +174,7 @@ class RideSharingSimulation:
         """Get simulation data for analysis."""
         return round(self.dispatcher.global_assignment_cost/self.dispatcher.n_served_customers, ndigits=2)
 
-
 # Setup and run the simulation
-
 simulation_results = {"simulation_id": [], "global_cost": []}
     
 for simulation_id in range(0, 10): 
