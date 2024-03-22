@@ -55,8 +55,6 @@ class MILPSolver(AssignmentSolver):
                 .stack()
                 .to_dict())
         
-        print(cost)
-
         model.cost = pe.Param(model.source, model.destination, initialize=cost)
         model.y = pe.Var(
             model.source, model.destination, domain=decision_domain
