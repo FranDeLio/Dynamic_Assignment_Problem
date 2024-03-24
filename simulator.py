@@ -1,7 +1,9 @@
 import random
+import os
 
 from solvers import MILPSolver
 from utils import timeit
+from config import DATA_PATH
 
 import numpy as np
 from scipy.optimize import linear_sum_assignment
@@ -9,6 +11,8 @@ import simpy
 from scipy.stats import norm
 from scipy.spatial import distance
 import pandas as pd
+from datetime import datetime
+
 
 simulation_data = []
 
@@ -176,7 +180,7 @@ class RideSharingSimulation:
 
     def load_simulation_data(self):
 
-        self.simulation_data = []
+        self.user_data = []
         self.average_waiting_time = np.nanmean([user.waiting_time for user in self.dispatcher.served_users])
         self.average_service_time = np.nanmean([user.service_time for user in self.dispatcher.served_users])
         self.average_order_fullfilment_time = np.nanmean([user.order_fullfilment_time for user in self.dispatcher.served_users])
@@ -185,29 +189,31 @@ class RideSharingSimulation:
 
         for user in self.dispatcher.served_users:
             
-            try:
-                user_data={"user_id": user.id, "car_id": user.car_id, "activation_time": user.request_activation_time,
-                    "request_completion_time": user.request_completion_time,"waiting_time": user.waiting_time,
-                    "service_time": user.service_time, "order_fullfilment_time": user.order_fullfilment_time, 
-                    "assignment_cost": user.assignment_cost, "simulation_id": self.id}
-            
-                self.simulation_data.append(user_data)
-            except Exception as error:
-                print(error)
-                print(user.to_dict())
+            row_user_data={"user_id": user.id, "car_id": user.car_id, "activation_time": user.request_activation_time,
+                "request_completion_time": user.request_completion_time,"waiting_time": user.waiting_time,
+                "service_time": user.service_time, "order_fullfilment_time": user.order_fullfilment_time, 
+                "assignment_cost": user.assignment_cost, "orders_is_served": user.served_status, "simulation_id": self.id}
+        
+            self.user_data.append(row_user_data)
 
 
-# Setup and run the simulation
-simulation_results = {"simulation_id": [], "global_cost": []}
+if __name__ == "__main__":
 
-for simulation_id in range(0, 1): 
-    env = simpy.Environment()
-    simulation = RideSharingSimulation(env=env, id=simulation_id, num_cars=20, num_users=40, map_size=(10, 10), simulation_time=200, inflow_rate=10)
-    simulation.run()
-    simulation.load_simulation_data()
-    simulation_data = simulation.simulation_data
- 
-simulation_data = pd.DataFrame(simulation_data).to_csv("sim_data.csv", index=False)
-print(simulation_data)
-print(f"Service time: {simulation.average_service_time}")
-print(f"Waiting time: {simulation.average_waiting_time}")
+    # Setup and run the simulation
+    simulation_results = {"simulation_id": [], "global_cost": []}
+    filename = f"{DATA_PATH}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_simulation.csv"
+
+    for simulation_id in range(0, 20): 
+        env = simpy.Environment()
+
+        simulation = RideSharingSimulation(env=env, id=simulation_id, num_cars=20, num_users=40, inflow_rate=10, map_size=(10, 10), simulation_time=500)
+        simulation.run()
+        simulation.load_simulation_data()
+        simulation_data = pd.DataFrame(simulation.user_data)
+        simulation_data.to_csv(filename, mode='a', index=False, header=not os.path.exists(filename))
+    
+        print(simulation_data)
+        print(f"Service time: {simulation.average_service_time}")
+        print(f"Waiting time: {simulation.average_waiting_time}")
+
+print(f"Data Saved in {filename}")
