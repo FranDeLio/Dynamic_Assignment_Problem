@@ -216,4 +216,4 @@ if __name__ == "__main__":
         print(f"Service time: {simulation.average_service_time}")
         print(f"Waiting time: {simulation.average_waiting_time}")
 
-print(f"Data Saved in {filename}")
+    print(f"Data Saved in {filename}")
