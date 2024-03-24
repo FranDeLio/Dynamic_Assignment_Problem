@@ -79,14 +79,13 @@ class MILPSolver(AssignmentSolver):
             return constraint
         
         def min_assignments(model):
-            # an origin c can only be assign to one given destination k.
+            # a minimum of min(|origin|,|destination|) matches ought to be made.
             constraint = sum(model.y[c, k] for k in model.destination for c in model.source) == self.n_assignments
             return constraint
 
         model.serve_all_destinations = pe.Constraint(model.destination, rule=serve_all_destinations)
         model.origin_unicity = pe.Constraint(model.source, rule=origin_unicity)
         model.min_assignments = pe.Constraint(rule=min_assignments)
-
 
         result = solver.solve(model, timelimit=60)
 
