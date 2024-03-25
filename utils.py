@@ -1,5 +1,6 @@
 import time
 from functools import wraps
+import os
 
 def timeit(func):
     """Decorator to measure the execution time of a function."""
@@ -14,3 +15,8 @@ def timeit(func):
         return result
 
     return timeit_wrapper
+
+def create_directory_if_missing(directory):
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
