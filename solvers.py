@@ -101,7 +101,5 @@ class MILPSolver(AssignmentSolver):
            solution_df.loc[i,"assignment_cost"] = cost[solution_df.loc[i,"cars"], solution_df.loc[i,"users"]]
         
         result = solution_df.to_dict(orient='records')
-
-        print(f"Min_assignments: {self.n_assignments}, N_assignments: {n_rows}")
         
         return result

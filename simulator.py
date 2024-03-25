@@ -11,6 +11,7 @@ import simpy
 from scipy.stats import norm
 from scipy.spatial import distance
 import pandas as pd
+from tqdm import tqdm 
 from datetime import datetime
 
 
@@ -29,7 +30,8 @@ class Car(simpy.Resource):
 
 class User:
     """Representation of a user in the simulation."""
-    def __init__(self, env, id, map_size):
+
+    def __init__(self, env, id, map_size, verbose):
         self.env = env
         self.id = id
         self.map_size = map_size
@@ -50,6 +52,7 @@ class User:
         self.request_completion_time = None
         self.service_time = np.nan
         self.order_fullfilment_time = np.nan
+        self.verbose = verbose
 
     def to_dict(self):
         return vars(self)
@@ -59,7 +62,7 @@ class User:
 
     def use_car(self, car):
         """User action to use a car."""
-        print(f"User {self.id} takes car {car.id} at time {self.env.now}")
+        if self.verbose: print(f"User {self.id} takes car {car.id} at time {self.env.now}")
         self.car_id = car.id
         with car.request() as request:
 
@@ -74,7 +77,7 @@ class User:
             self.served_status = True
         
         # User returns the car
-        print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
+        if self.verbose: print(f"User {self.id} leaves car {car.id} at time {self.env.now}")
 
 class Dispatcher:
     """Dispatcher class to manage car-user assignments."""
@@ -132,7 +135,6 @@ class Dispatcher:
             self.set_user_to_served(user)
             self.set_car_to_free(car)
             
-
     def dispatch(self):
         """Dispatch cars to users."""
         if not self.available_cars or not self.users:
@@ -144,30 +146,31 @@ class Dispatcher:
 
 class RideSharingSimulation:
     """Simulation of car sharing system."""
-    def __init__(self, env, id, num_cars, num_users, map_size, simulation_time, inflow_rate):
+    def __init__(self, env, id, num_cars, num_users, map_size, simulation_time, inflow_rate, verbose):
         self.env = env
         self.id = id
         self.num_cars = num_cars
         self.num_users = num_users
         self.map_size = map_size
         self.cars = [Car(env, i, self.map_size, capacity=1) for i in range(num_cars)]
-        self.users = [User(env, i, self.map_size) for i in range(num_users)]
+        self.users = [User(env, i, self.map_size, self.verbose) for i in range(num_users)]
         self.available_cars = self.cars  # Initially, all cars are available
         self.dispatcher = Dispatcher(env, self.users, self.cars, MILPSolver(decision_variable_type="real", solver_name="cbc"))
         self.simulation_time = simulation_time
         self.expected_customer_inflow = inflow_rate
+        self.verbose = verbose
 
     def dispatch_cars(self):
         """Dispatch cars at regular intervals."""
         while True:
-            self.dispatcher.dispatch()
             n_new_users = np.random.poisson(self.expected_customer_inflow)
 
             for _ in range(0, n_new_users):
-                self.dispatcher.add_new_user(User(env, self.num_users, self.map_size))
-                print(f"User {self.num_users} joins the simulation at time {env.now}")
+                self.dispatcher.add_new_user(User(env, self.num_users, self.map_size, self.verbose))
+                if self.verbose: print(f"User {self.num_users} joins the simulation at time {env.now}")
                 self.num_users += 1
 
+            self.dispatcher.dispatch()
             yield self.env.timeout(15)  # Dispatch cars every 1 minute
 
     @timeit
@@ -188,32 +191,40 @@ class RideSharingSimulation:
         self.n_served_users = len(self.dispatcher.served_users)
 
         for user in self.dispatcher.served_users:
+
+            if user.served_status==True:
             
-            row_user_data={"user_id": user.id, "car_id": user.car_id, "activation_time": user.request_activation_time,
-                "request_completion_time": user.request_completion_time,"waiting_time": user.waiting_time,
-                "service_time": user.service_time, "order_fullfilment_time": user.order_fullfilment_time, 
-                "assignment_cost": user.assignment_cost, "orders_is_served": user.served_status, "simulation_id": self.id}
-        
+                row_user_data={"user_id": user.id, "car_id": user.car_id, "activation_time": user.request_activation_time,
+                    "request_completion_time": user.request_completion_time,"waiting_time": user.waiting_time,
+                    "service_time": user.service_time, "order_fullfilment_time": user.order_fullfilment_time, 
+                    "assignment_cost": user.assignment_cost, "order_is_served": user.served_status, "simulation_id": self.id}
+                
+            else: 
+
+                waiting_time_upper_bound = round(self.simulation_time - self.request_activation_time, 2)
+                order_fullfilment_time_upper_bound = round(self.simulation_time - self.request_activation_time, 2)
+
+                row_user_data={"user_id": user.id, "car_id": user.car_id, "activation_time": user.request_activation_time,
+                    "request_completion_time": user.request_completion_time,"waiting_time": waiting_time_upper_bound,
+                    "service_time": user.service_time, "order_fullfilment_time": order_fullfilment_time_upper_bound, 
+                    "assignment_cost": user.assignment_cost, "order_is_served": user.served_status, "simulation_id": self.id}
+            
             self.user_data.append(row_user_data)
 
 
-if __name__ == "__main__":
+# Setup and run the simulation
+# simulation_results = {"simulation_id": [], "global_cost": []}
+filename = f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_simulation.csv"
 
-    # Setup and run the simulation
-    simulation_results = {"simulation_id": [], "global_cost": []}
-    filename = f"{DATA_PATH}/{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_simulation.csv"
+for simulation_id in tqdm(range(0, 10)): 
+    env = simpy.Environment()
 
-    for simulation_id in range(0, 20): 
-        env = simpy.Environment()
+    simulation = RideSharingSimulation(env=env, id=float(simulation_id), num_cars=20, num_users=0, inflow_rate=22, map_size=(10, 10), simulation_time=4000, verbose=True)
+    simulation.run()
+    simulation.load_simulation_data()
+    simulation_data = pd.DataFrame(simulation.user_data)
+    simulation_data.to_csv(DATA_PATH / filename, mode='a', index=False, header=not os.path.exists(DATA_PATH / filename))
 
-        simulation = RideSharingSimulation(env=env, id=simulation_id, num_cars=20, num_users=40, inflow_rate=10, map_size=(10, 10), simulation_time=500)
-        simulation.run()
-        simulation.load_simulation_data()
-        simulation_data = pd.DataFrame(simulation.user_data)
-        simulation_data.to_csv(filename, mode='a', index=False, header=not os.path.exists(filename))
-    
-        print(simulation_data)
-        print(f"Service time: {simulation.average_service_time}")
-        print(f"Waiting time: {simulation.average_waiting_time}")
+print(f"Data Saved in {filename}")
 
-    print(f"Data Saved in {filename}")
+#####
