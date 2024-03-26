@@ -1,4 +1,5 @@
 import os
+import logging
 from pathlib import Path
 
 from utils import create_directory_if_missing
@@ -6,6 +7,7 @@ from utils import create_directory_if_missing
 SPAN = 0.4
 LOWER_QUANTILE = 0.05
 HIGHER_QUANTILE = 0.95
+VERBOSITY = logging.DEBUG
 
 DATA_PATH = Path("./data")
 create_directory_if_missing(DATA_PATH)
