@@ -10,6 +10,8 @@ from datetime import datetime
 from dataclasses import dataclass
 from abc import ABC
 
+from simulator.car import Car
+from simulator.user import User
 from simulator.solvers import MILPSolver
 from utils import timeit
 from config import DATA_PATH, VERBOSITY
