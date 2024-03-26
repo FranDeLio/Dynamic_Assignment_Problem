@@ -1,4 +1,4 @@
-from plotnine import ggplot, aes, geom_point, geom_smooth, coord_cartesian, scale_color_identity, theme
+from plotnine import ggplot, aes, geom_point, geom_smooth, coord_cartesian, theme
 import pandas as pd
 from tqdm import tqdm
 
@@ -6,8 +6,6 @@ import os
 
 from config import DATA_PATH, PLOTS_PATH, SPAN, LOWER_QUANTILE, HIGHER_QUANTILE
 from utils import create_directory_if_missing
-
-
 
 
 filename = "2024-03-25_15-42-30_simulation"
