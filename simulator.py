@@ -102,7 +102,7 @@ class Dispatcher:
         """Add a new user to the simulation."""
         self.users.update({user.id: user})
         
-        logging.debug(f"User {self.num_users} joins the simulation at time {env.now}")
+        logging.debug(f"User {user.id} joins the simulation at time {self.env.now}")
 
     def set_user_to_served(self, user):
         """Remove user from the simulation."""
@@ -167,9 +167,8 @@ class RideSharingSimulation:
         """Dispatch cars at regular intervals."""
         while True:
             n_new_users = np.random.poisson(self.expected_customer_inflow)
-
+            
             for _ in range(0, n_new_users):
-
                 self.dispatcher.add_new_user(User(env, self.num_users, self.map_size))
                 self.num_users += 1
 
